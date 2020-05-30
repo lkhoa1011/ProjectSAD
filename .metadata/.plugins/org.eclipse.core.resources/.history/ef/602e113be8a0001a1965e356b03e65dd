@@ -1,0 +1,256 @@
+package system.booking.controller;
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.client.circuitbreaker.EnableCircuitBreaker;
+import org.springframework.core.env.Environment;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
+
+import system.booking.entity.Booking;
+
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.mail.MessagingException;
+@EnableCircuitBreaker
+@RestController
+@Service
+@RequestMapping("/")
+public class SystemController {
+	@Autowired
+	private RestTemplate restTemplate;
+	
+	@Autowired
+	private Environment env;
+	
+	@Autowired
+	private JavaMailSender javaMailSender;
+	
+	@RequestMapping("/")
+	public String home() {
+		// This is useful for debugging
+		// When having multiple instance of gallery service running at different ports.
+		// We load balance among them, and display which instance received the request.
+		return "Hello from Gallery Service running at port: " + env.getProperty("local.server.port");
+	}
+	
+	@HystrixCommand(fallbackMethod = "errorTickets")
+	@Retryable(value =  { SQLException.class }, maxAttempts = 3)
+	@RequestMapping("/tickets/{plane}")
+	public Booking Ticket(@PathVariable("plane") String plane)throws MessagingException,IOException {
+		// create gallery object
+		Booking tc = new Booking();
+		
+		JSONArray jaTicket = new JSONArray();
+		String[] hang = plane.split(",");
+		
+		for (int i = 0; i < hang.length; i++) {
+			
+			JSONParser jsonParser = new JSONParser();
+			Object ob;
+			JSONObject jsOb = new JSONObject();
+			try {
+				String result = restTemplate.getForObject("http://gateway-" + hang[i] + "/" + hang[i] + "/tickets",
+						String.class);
+				 ob = jsonParser.parse(result);
+				
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				ob = null ;
+			}
+			if(ob == null) {
+				jsOb.put(hang[i],hang[i]+"Error");
+				sendMail(hang[i]+"Error");
+			}else {
+				JSONObject obj = (JSONObject) ob;
+				JSONArray arr = (JSONArray) obj.get("ticket");
+				JSONObject newOb = new JSONObject();
+				newOb.put(hang[i], arr);
+				jaTicket.add(newOb);
+			}
+			jaTicket.add(jsOb);
+		}
+		tc.setTicket((List<Object>) jaTicket);
+	
+		return tc;
+	}
+	@Recover
+	 public String recover(SQLException t){
+		System.out.println("-------------------");
+		return null;
+    }
+	
+	
+	public Booking errorTickets(@PathVariable("plane") String plane) {
+		// create gallery object
+		Booking tc = new Booking();
+		
+		JSONArray jaTicket = new JSONArray();
+		String[] hang = plane.split(",");
+		
+		for (int i = 0; i < hang.length; i++) {
+			JSONParser js = new JSONParser();
+			Object ob;
+			JSONObject jsOb = new JSONObject();
+			try {
+				String result = restTemplate.getForObject("http://gateway-" + hang[i] + "/" + hang[i] + "/tickets",
+						String.class);
+				ob = js.parse(result);
+				JSONObject obj = (JSONObject) ob;
+				JSONArray arr = (JSONArray) obj.get("ticket");
+				JSONObject newOb = new JSONObject();
+				newOb.put(hang[i], arr);
+				jaTicket.add(newOb);
+			}catch (Exception e) {
+				e.printStackTrace();
+				ob = null;
+			}
+			if(ob == null) {
+				jsOb.put(hang[i],hang[i]+"Error");
+			}else {
+				JSONObject obj = (JSONObject) ob;
+				JSONArray arr = (JSONArray) obj.get("ticket");
+				JSONObject newOb = new JSONObject();
+				newOb.put(hang[i], arr);
+			}
+			jaTicket.add(jsOb);
+			
+		}
+		tc.setTicket((List<Object>) jaTicket);
+	
+		return tc;
+	}
+	
+	public void sendMail(String error) {
+        SimpleMailMessage msg = new SimpleMailMessage();
+        msg.setTo("nhoxlapro1011@gmail.com");
+        msg.setSubject("Testing from Spring Boot");
+        msg.setText(error);
+        System.out.println("Send error");
+        javaMailSender.send(msg);
+        System.out.println("Send ok");
+	}
+	
+//	public Booking Ticket(@PathVariable("plane") String plane) {
+//		// create gallery object
+//		Booking tc = new Booking();
+//		
+//		JSONArray jaTicket = new JSONArray();
+//		String[] hang = plane.split(",");
+//		
+//		for (int i = 0; i < hang.length; i++) {
+//			
+//			JSONParser jsonParser = new JSONParser();
+//			Object ob;
+//			JSONObject jsOb = new JSONObject();
+//			try {
+//				String result = restTemplate.getForObject("http://gateway-" + hang[i] + "/" + hang[i] + "/tickets",
+//						String.class);
+//				 ob = jsonParser.parse(result);
+//				
+//			} catch (Exception e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//				ob = null ;
+//			}
+//			if(ob == null) {
+//				jsOb.put(hang[i],hang[i]+"Error");
+//			}else {
+//				JSONObject obj = (JSONObject) ob;
+//				JSONArray arr = (JSONArray) obj.get("ticket");
+//				JSONObject newOb = new JSONObject();
+//				newOb.put(hang[i], arr);
+//				jaTicket.add(newOb);
+//			}
+//			jaTicket.add(jsOb);
+//		}
+//		tc.setTicket((List<Object>) jaTicket);
+//	
+//		return tc;
+//	}
+	
+//	public Booking Ticket(@PathVariable("plane") String plane) {
+//		// create gallery object
+//		Booking tc = new Booking();
+//		
+//		JSONArray jaTicket = new JSONArray();
+//		String[] hang = plane.split(",");
+//		
+//		for (int i = 0; i < hang.length; i++) {
+//			
+//			JSONParser jsonParser = new JSONParser();
+//			try {
+//				String result = restTemplate.getForObject("http://gateway-" + hang[i] + "/" + hang[i] + "/tickets",
+//						String.class);
+//				Object ob = jsonParser.parse(result);
+//				JSONObject obj = (JSONObject) ob;
+//				JSONArray arr = (JSONArray) obj.get("ticket");
+//				JSONObject newOb = new JSONObject();
+//				newOb.put(hang[i], arr);
+//				jaTicket.add(newOb);
+//			} catch (Exception e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
+//		}
+//		tc.setTicket((List<Object>) jaTicket);
+//	
+//		return tc;
+//	}
+	
+	
+	@RequestMapping("/{plane}/{ngaydi}/{ngayve}/{noidi}/{noiden}/{nguoilon}/{treem}/{embe}")
+	public Booking getBooking(@PathVariable("plane") String plane ,@PathVariable final String ngaydi, @PathVariable final String ngayve , @PathVariable final String noidi ,@PathVariable final String noiden ,@PathVariable final String nguoilon,
+			@PathVariable final String treem, @PathVariable final String embe) {
+		// create gallery object
+		Booking tc = new Booking();
+		
+		JSONArray jaTicket = new JSONArray();
+		String[] hang = plane.split(",");
+		
+		for (int i = 0; i < hang.length; i++) {
+			String result = restTemplate.getForObject("http://gateway-" + hang[i] + "/" + hang[i] + "/" + ngaydi + "/" + ngayve + "/" + noidi + "/" + noiden + "/" + nguoilon + "/" + treem + "/" + embe + "/tickets",
+					String.class);
+			JSONParser jsonParser = new JSONParser();
+			try {
+				Object ob = jsonParser.parse(result);
+				JSONObject obj = (JSONObject) ob;
+				JSONArray arr = (JSONArray) obj.get("ticket");
+				JSONObject newOb = new JSONObject();
+				newOb.put(hang[i], arr);
+				jaTicket.add(newOb);
+			} catch (ParseException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		tc.setTicket((List<Object>) jaTicket);
+	
+		return tc;
+	}
+	
+	// -------- Admin Area --------
+	// This method should only be accessed by users with role of 'admin'
+	// We'll add the logic of role based auth later
+	@RequestMapping("/admin")
+	public String homeAdmin() {
+		return "This is the admin area of Gallery service running at port: " + env.getProperty("local.server.port");
+	}
+}

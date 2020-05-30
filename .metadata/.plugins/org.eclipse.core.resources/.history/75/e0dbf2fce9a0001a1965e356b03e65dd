@@ -1,0 +1,26 @@
+package system.booking.controller;
+
+import java.sql.SQLException;
+
+
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.stereotype.Service;
+
+
+
+@Service
+public class BillingService {
+    int counter =0;
+    @Retryable(value = { SQLException.class }, maxAttempts = 3)
+    public String simpleRetry() throws SQLException {
+        counter++;
+        System.out.println("Billing Service Failed "+ counter);
+        throw new SQLException();
+    }
+    @Recover
+    public String recover(SQLException t){
+    	System.out.println("Service recovering");
+        return "Service recovered from billing service failure.";
+    }
+}

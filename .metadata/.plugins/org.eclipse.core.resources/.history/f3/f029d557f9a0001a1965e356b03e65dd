@@ -1,0 +1,12 @@
+package system.booking.controller;
+
+
+
+import org.springframework.web.bind.annotation.RestController;
+
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+
+@RestController
+public class MainServiceController {
+	 
+}

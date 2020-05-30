@@ -1,0 +1,17 @@
+package system.booking.controller;
+
+public class MyRestController {
+	@Autowired
+    BackendAdapter backendAdapter;
+ 
+    @GetMapping("/retry")
+    @ExceptionHandler({ Exception.class })
+    public String validateSPringRetryCapability(@RequestParam(required = false) boolean simulateretry,
+                                @RequestParam(required = false) boolean simulateretryfallback) 
+    {
+        System.out.println("===============================");
+        System.out.println("Inside RestController mathod..");
+ 
+        return backendAdapter.getBackendResponse(simulateretry, simulateretryfallback);
+    }
+}
